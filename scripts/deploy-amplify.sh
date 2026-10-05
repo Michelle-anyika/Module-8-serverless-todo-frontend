@@ -8,7 +8,7 @@ STACK="${STACK_NAME:-module-8-serverless-todo}"
 BRANCH="${AMPLIFY_BRANCH:-main}"
 
 APP_ID=$(aws cloudformation describe-stacks --region "$REGION" --stack-name "$STACK" \
-  --query "Stacks[0].Outputs[?OutputKey=='AmplifyAppId'].OutputValue" --output text)
+  --query "Stacks[0].Outputs[?OutputKey=='AmplifyAppId'].OutputValue" --output text | tr -d '\r')
 echo "Amplify app: $APP_ID / branch: $BRANCH"
 
 # Export the branch's VITE_* environment variables for the build.
@@ -16,7 +16,7 @@ while IFS=$'\t' read -r key value; do
   [ -n "$key" ] && export "$key=$value" && echo "  $key=$value"
 done < <(aws amplify get-branch --region "$REGION" --app-id "$APP_ID" --branch-name "$BRANCH" \
   --query "branch.environmentVariables" --output json \
-  | python -c "import json,sys; [print(f'{k}\t{v}') for k,v in json.load(sys.stdin).items()]")
+  | python -c "import json,sys; [print(f'{k}\t{v}') for k,v in json.load(sys.stdin).items()]" | tr -d '\r')
 
 npm run build
 
@@ -24,13 +24,13 @@ ZIP="$(mktemp -d)/site.zip"
 (cd dist && python -c "import shutil,sys; shutil.make_archive(sys.argv[1][:-4], 'zip', '.')" "$ZIP")
 
 read -r JOB_ID UPLOAD_URL < <(aws amplify create-deployment --region "$REGION" --app-id "$APP_ID" \
-  --branch-name "$BRANCH" --query "[jobId, zipUploadUrl]" --output text)
+  --branch-name "$BRANCH" --query "[jobId, zipUploadUrl]" --output text | tr -d '\r')
 curl -sSf -X PUT -H "Content-Type: application/zip" --upload-file "$ZIP" "$UPLOAD_URL"
 aws amplify start-deployment --region "$REGION" --app-id "$APP_ID" --branch-name "$BRANCH" --job-id "$JOB_ID" >/dev/null
 
 for _ in $(seq 1 60); do
   STATUS=$(aws amplify get-job --region "$REGION" --app-id "$APP_ID" --branch-name "$BRANCH" --job-id "$JOB_ID" \
-    --query "job.summary.status" --output text)
+    --query "job.summary.status" --output text | tr -d '\r')
   echo "Deployment job $JOB_ID: $STATUS"
   case "$STATUS" in
     SUCCEED) echo "Live at https://$BRANCH.$APP_ID.amplifyapp.com"; exit 0 ;;
