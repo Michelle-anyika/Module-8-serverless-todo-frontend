@@ -1,0 +1,54 @@
+name: Deploy frontend to Amplify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: amplify-deploy
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: eu-north-1
+  STACK_NAME: module-8-serverless-todo
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build check
+        run: npm run build
+        env:
+          VITE_USER_POOL_ID: ci-placeholder
+          VITE_API_URL: https://example.invalid
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Build with Amplify branch env vars and deploy
+        run: bash scripts/deploy-amplify.sh
